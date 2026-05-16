@@ -1,0 +1,6 @@
+{
+  "name": "Catetkas",
+  "description": "A comprehensive cashier application with dashboard, stock reports, customer management, and real-time analytics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

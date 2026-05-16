@@ -1,0 +1,72 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Global Helpers
+    function isSignedIn() { return request.auth != null; }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    
+    // User profile rules
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow create: if isSignedIn() && isOwner(userId) 
+                    && incoming().role in ['admin', 'staff']
+                    && incoming().uid == userId;
+      allow update: if isOwner(userId) && incoming().role == existing().role;
+    }
+
+    // Product rules
+    match /products/{productId} {
+      function isValidProduct(data) {
+        return data.name is string && data.name.size() <= 100
+          && data.stock is number && data.stock >= 0
+          && data.price is number && data.price >= 0
+          && data.userId == request.auth.uid;
+      }
+      
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidProduct(incoming()) && isValidId(productId);
+      allow update: if isSignedIn() && isOwner(existing().userId) && isValidProduct(incoming());
+      allow delete: if isSignedIn() && isOwner(existing().userId);
+    }
+
+    // Transaction rules
+    match /transactions/{transactionId} {
+      function isValidTransaction(data) {
+        return data.type in ['in', 'out']
+          && data.totalAmount is number && data.totalAmount >= 0
+          && data.userId == request.auth.uid
+          && data.createdAt is timestamp;
+      }
+
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidTransaction(incoming()) && isValidId(transactionId);
+      // Transactions should be immutable for integrity
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // Customer rules
+    match /customers/{customerId} {
+      function isValidCustomer(data) {
+        return data.name is string && data.name.size() <= 100
+          && data.userId == request.auth.uid;
+      }
+
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidCustomer(incoming()) && isValidId(customerId);
+      allow update: if isSignedIn() && isOwner(existing().userId) && isValidCustomer(incoming());
+      allow delete: if isSignedIn() && isOwner(existing().userId);
+    }
+  }
+}
